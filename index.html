@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Frame Hotel Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- ✅ Load Mapbox GL CSS and JS FIRST -->
+  <link
+    href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css"
+    rel="stylesheet"
+  />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+
+  <!-- ✅ Add Geist font from Google Fonts HERE -->
+ <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap" rel="stylesheet">
+
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+
+    /* ✅ Add this for ALL popup styling */
+   .custom-popup {
+ text-align: center;
+  font-family: Geist;
+  padding: 10px;
+  color: #2F302F;
+  background color; #f0eeea;
+  border-radius: 6px;
+}
+.custom-popup .address {
+  font-size: 0.75em;
+  font-weight: 400;
+  margin: 4px 0;
+}
+.custom-popup h3 {
+  margin: 0;
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.custom-popup p {
+  margin: 5px 0;
+  font-size: 0.95em;
+}
+
+.custom-marker img {
+  transition: transform 0.2s ease;
+}
+
+/* Hover scaling */
+.custom-marker.hover img {
+  transform: scale(1.3);
+}
+
+/* Clicked/locked scaling */
+.custom-marker.locked img {
+  transform: scale(1.3);
+}
+
+<script>
+// ==============
+// Webflow hookup
+// ==============
+
+// 1) Listen to ANY element that has data-category
+const filterButtons = document.querySelectorAll('[data-category]');
+
+// (Optional) helper to toggle an active class for styling
+function setActiveButton(activeBtn) {
+  filterButtons.forEach(btn => {
+    btn.classList.toggle('is-active', btn === activeBtn);
+  });
+}
+
+// 2) Zoom/fit to the currently filtered markers
+function fitToCategory(category) {
+  const bounds = new mapboxgl.LngLatBounds();
+  let count = 0;
+
+  allMarkers.forEach(({ marker, category: cat }) => {
+    const isMatch = category === 'All' || cat === category;
+    if (isMatch) {
+      bounds.extend(marker.getLngLat());
+      count++;
+    }
+  });
+
+  // No matches: do nothing
+  if (count === 0) return;
+
+  // One point: center and use a nice zoom
+  if (count === 1) {
+    map.easeTo({ center: bounds.getCenter(), zoom: 16 });
+    return;
+  }
+
+  // Multiple points: fit them with padding
+  map.fitBounds(bounds, { padding: { top: 120, right: 40, bottom: 40, left: 40 }, maxZoom: 17 });
+}
+
+// 3) Hook clicks to filter + fit
+filterButtons.forEach(button => {
+  button.addEventListener('click', () => {
+    const selectedCategory = button.getAttribute('data-category');
+    filterMarkers(selectedCategory);   // you already have this from the legend version
+    fitToCategory(selectedCategory);
+    setActiveButton(button);
+  });
+});
+
+// 4) (Optional) On load, default to "All" and fit to everything
+window.addEventListener('DOMContentLoaded', () => {
+  const allBtn = document.querySelector('[data-category="All"]');
+  if (allBtn) {
+    allBtn.click(); // triggers filter + fit + active state
+  } else {
+    // If no "All" button, fit to everything once
+    fitToCategory('All');
+  }
+});
+</script>
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+   <script>
+    mapboxgl.accessToken = 'pk.eyJ1IjoiZnJhbWVob3RlbCIsImEiOiJjbWN0ZGpjamEwNGFpMmtvaTg5MjVyeW82In0.4lypnDwBwqwQwbjbc0sGig';
+
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/framehotel/cmctkov2v00te01p6ac6q1a9v',
+      center: [-97.750224, 30.24948],
+      zoom: 16.82,
+      minZoom: 4,
+      maxZoom: 20
+    });
+// Disable scroll zoom by default
+map.scrollZoom.disable();
+
+// === Desktop: Show a tooltip if Ctrl is not pressed ===
+map.on('wheel', (e) => {
+  if (!e.originalEvent.ctrlKey) {
+    e.preventDefault();
+   
+  }
+});
+
+// === Mobile: Show a one-time gesture tip ===
+let touchMessageShown = false;
+map.on('touchstart', (e) => {
+  if (e.points.length > 1 && !touchMessageShown) {
+    showTooltip('Use two fingers to move or zoom the map');
+    touchMessageShown = true;
+  }
+});
+
+// === Tooltip Utility ===
+function showTooltip(message) {
+  let tooltip = document.getElementById('map-tooltip');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.id = 'map-tooltip';
+    tooltip.style.position = 'absolute';
+    tooltip.style.bottom = '20px';
+    tooltip.style.left = '50%';
+    tooltip.style.transform = 'translateX(-50%)';
+    tooltip.style.background = 'rgba(0,0,0,0.7)';
+    tooltip.style.color = '#fff';
+    tooltip.style.padding = '6px 12px';
+    tooltip.style.borderRadius = '4px';
+    tooltip.style.fontSize = '0.9em';
+    tooltip.style.fontFamily = 'Geist, sans-serif';
+    tooltip.style.zIndex = 10;
+    document.body.appendChild(tooltip);
+  }
+
+  tooltip.innerText = message;
+  tooltip.style.opacity = '1';
+
+  clearTimeout(tooltip.timer);
+  tooltip.timer = setTimeout(() => {
+    tooltip.style.opacity = '0';
+  }, 2500);
+}
+
+    map.addControl(new mapboxgl.NavigationControl());
+
+// ===================
+// FRAME HOTEL - SoCo
+// ===================
+const popupSoCo = new mapboxgl.Popup({ offset: 25, closeOnClick: false }).setHTML(`
+  <div class="custom-popup">
+    <h3>Frame Hotel - SoCo</h3>
+    <p class="address">110 WEST ELIZABETH ST. | AUSTIN, TX 78704</p>
+Escape the city’s pace while staying in its heart.  Frame Hotel offers a private oasis
+on the corner of South Congress and W. Elizabeth, directly behind the Guero’s Oak Garden and adjacent to Austin’s famous boot block.</p>
+    <p><a target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=30.24948,-97.750224">See Route</a></p>
+  </div>
+`);
+
+const elSoCo = document.createElement('div');
+elSoCo.className = 'custom-marker';
+elSoCo.innerHTML = `
+  <img src="https://raw.githubusercontent.com/Framehotel/my-map-icons/refs/heads/main/Frame%20SoCo%20Icon%20-%20TEST.png" 
+       alt="Frame SoCo Icon" 
+       style="width:  80px; height: 60px;">
+`;
+
+const markerSoCo = new mapboxgl.Marker(elSoCo)
+
+  .setLngLat([-97.750715, 30.24936])
+  .setPopup(popupSoCo)
+  .addTo(map);
+
+let lockedSoCo = false;
+
+elSoCo.addEventListener('mouseenter', () => {
+  if (!lockedSoCo) {
+    elSoCo.classList.add('hover');
+    popupSoCo.addTo(map);
+  }
+});
+
+elSoCo.addEventListener('mouseleave', () => {
+  if (!lockedSoCo) {
+    elSoCo.classList.remove('hover');
+    popupSoCo.remove();
+  }
+});
+
+elSoCo.addEventListener('click', (e) => {
+  e.stopPropagation();
+  lockedSoCo = !lockedSoCo;
+  if (lockedSoCo) {
+    popupSoCo.addTo(map);
+    elSoCo.classList.add('locked');
+  } else {
+    popupSoCo.remove();
+    elSoCo.classList.remove('locked');
+  }
+});
+
+map.on('click', () => {
+  if (lockedSoCo) {
+    lockedSoCo = false;
+    popupSoCo.remove();
+    elSoCo.classList.remove('locked');
+  }
+});
+
+// =========================
+// FRAME HOTEL - Treehouse
+// =========================
+const popupTreehouse = new mapboxgl.Popup({ offset: 25, closeOnClick: false }).setHTML(`
+  <div class="custom-popup">
+    <h3>Frame Hotel - Treehouse</h3>
+    <p class="address">110 THE CIRCLE | AUSTIN, TX 78704</p>
+Escape the city’s pace while staying in its heart. Frame Hotel offers a
+private oasis directly behind South Congress Ave., the world-famous Continental Club, and Austin’s famous Amy’s Ice Cream.
+
+</p>
+    <p><a target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=30.25006,-97.74838">See Route</a></p>
+  </div>
+`);
+
+const elTreehouse = document.createElement('div');
+elTreehouse.className = 'custom-marker';
+elTreehouse.innerHTML = `
+  <img src="https://raw.githubusercontent.com/Framehotel/my-map-icons/refs/heads/main/Frame%20Treehouse%20Icon%20-%20Test.png" 
+       style="width: 95px; height: 60px;">
+`;
+
+const markerTreehouse = new mapboxgl.Marker(elTreehouse)
+
+  .setLngLat([-97.74838, 30.25006])
+  .setPopup(popupTreehouse)
+  .addTo(map);
+
+let lockedTreehouse = false;
+
+elTreehouse.addEventListener('mouseenter', () => {
+  if (!lockedTreehouse) {
+    elTreehouse.classList.add('hover');
+    popupTreehouse.addTo(map);
+  }
+});
+
+elTreehouse.addEventListener('mouseleave', () => {
+  if (!lockedTreehouse) {
+    elTreehouse.classList.remove('hover');
+    popupTreehouse.remove();
+  }
+});
+
+elTreehouse.addEventListener('click', (e) => {
+  e.stopPropagation();
+  lockedTreehouse = !lockedTreehouse;
+  if (lockedTreehouse) {
+    popupTreehouse.addTo(map);
+    elTreehouse.classList.add('locked');
+  } else {
+    popupTreehouse.remove();
+    elTreehouse.classList.remove('locked');
+  }
+});
+
+map.on('click', () => {
+  if (lockedTreehouse) {
+    lockedTreehouse = false;
+    popupTreehouse.remove();
+    elTreehouse.classList.remove('locked');
+  }
+});
+  const categoryIcons = {
+    'Markets': 'https://raw.githubusercontent.com/Framehotel/my-map-icons/refs/heads/main/Grocery%20Icon%20beige.png',
+    'Music': 'https://raw.githubusercontent.com/Framehotel/my-map-icons/refs/heads/main/Music%20Icon%20Yellow.png',
+    'Food': 'https://raw.githubusercontent.com/Framehotel/my-map-icons/refs/heads/main/Restaurant%20Icon%201.png',
+    'Shopping': 'https://raw.githubusercontent.com/Framehotel/my-map-icons/refs/heads/main/Shopping%20Icon%20Orange.png',
+    'Sights': 'https://raw.githubusercontent.com/Framehotel/my-map-icons/refs/heads/main/Sightseeing%20Icon.png',
+    'Roadtrips': 'https://raw.githubusercontent.com/Framehotel/my-map-icons/refs/heads/main/Road%20Trip.png',
+    'Gym': 'https://raw.githubusercontent.com/Framehotel/my-map-icons/refs/heads/main/Gym%20Icon.png',
+    'Airport': 'https://raw.githubusercontent.com/Framehotel/my-map-icons/refs/heads/main/Airport%20Marker.png',
+    'University': 'https://raw.githubusercontent.com/Framehotel/my-map-icons/refs/heads/main/University%20Icon.png'
+  };
+const places = [
+{
+    title: "The Continental Club",
+    category: "Music",
+    description: "Where Austin's rich musical history comes alive. Vintage vibes and eclectic performances. Stevie Ray Vaughan, James McMurtry, Billy Gibbons, Robert Plant have all played here. Upstairs Gallery offers an intimate experience.",
+    coords: [-97.74904202155348, 30.25050097807724]
+  },
+  {
+    title: "C-Boy's Heart & Soul",
+    category: "Music",
+    description: "Step into C-Boy's and be transported to the heart of Austin's music scene. Iconic bar with a soulful vibe and live music. Hosted The Black Pumas, Gary Clark Jr., Alejandro Escovedo, Tameca Jones, The Peterson Brothers.",
+    coords: [-97.75211068714913, 30.243628977010573]
+  },
+  {
+    title: "Equipment Room",
+    category: "Music",
+    description: "Subterranean audiophile cocktail lounge behind Music Lane. Incredible record collections and vintage hi-fi gear. Chill vibes and expert mixologists. Pro-tip: Try the B-Sides cocktails.",
+    coords: [-97.74736263466482, 30.252894789841307]
+  },
+  {
+    title: "Dante's HiFi",
+    category: "Music",
+    description: "Vinyl listening bar pop-up from Miami dedicated to analog audiophile culture in Austin. Relaxed, moody spot to let the music guide the night.",
+    coords: [-97.74797904832093, 30.253340215708505]
+  }, 
+  {
+    title: "The Salty",
+    category: "Food",
+    description: "Wynwood (Miami) transplant serving delectable donuts and donut holes on South Congress. Classics and seasonal flavors baked fresh daily. Don't miss the pop-tarts.",
+    coords: [-97.75212811645754, 30.24417748868386]
+  },
+  {
+    title: "Torchy's Tacos",
+    category: "Food",
+    description: "Local favorite for mouthwatering tacos with a creative twist. Bold flavors and fresh ingredients have turned this Austin original into a statewide phenomenon.",
+    coords: [-97.75151319532003, 30.245463509572232]
+  },
+  {
+    title: "June's All Day",
+    category: "Food",
+    description: "Chic French bistro-inspired spot with a great wine list. Perfect front patio. Standout burger, spicy fried chicken sandwich, and their Matzo Ball Caldo is legendary.",
+    coords: [-97.75114125580588, 30.246319040495607]
+  },
+  {
+    title: "Neighborhood Sushi",
+    category: "Food",
+    description: "Modern sushi destination on South Congress with a curated selection of fresh fish. Clean aesthetic and an inviting rear patio.",
+    coords: [-97.75108166339358, 30.246495559059127]
+  },
+  {
+    title: "Mañana",
+    category: "Food",
+    description: "Cozy coffee shop with great pastries. Laid-back vibe perfect for starting the day. The Kouign-amann is a must.",
+    coords: [-97.7497773046885, 30.24772600273046]
+  },
+  {
+    title: "Otoko",
+    category: "Food",
+    description: "Intimate 12-seat tasting experience from Chef Yoshi Okai. Seasonal and locally sourced ingredients prepared as multi-course art.",
+    coords: [-97.75018894556325, 30.247648885011344]
+  },
+  {
+    title: "Chapulín Cantina",
+    category: "Food",
+    description: "Authentic Mexican dishes and cocktails. Friendly atmosphere with lively patio. Queso Flameado and a cerveza are perfect after shopping South Congress.",
+    coords: [-97.75078444480654, 30.247274720510177]
+  },
+  {
+    title: "Vespaio Restaurant",
+    category: "Food",
+    description: "Beloved Italian spot with rustic charm. Handmade pastas, wood-fired pizzas, and everything from charcuterie to cheeses made in-house.",
+    coords: [-97.75075799398707, 30.247367547740467]
+  },
+   {
+    title: "Güero's Taco Bar",
+    category: "Food",
+    description: "SoCo OG serving interior Mexican cuisine, hand-shaken margaritas, live music, and old-Austin charm. The Oak Garden is magic.",
+    coords: [-97.75028677878254, 30.249148787058445]
+  },
+  {
+    title: "Home Slice Pizza",
+    category: "Food",
+    description: "Classic NY-style pies in Texas. Dine-in or grab a slice to-go next door. Famous for pizza, sandwiches, and big city attitude.",
+    coords: [-97.74957756619088, 30.249227331683812]
+  },
+  {
+    title: "More Home Slice Pizza",
+    category: "Food",
+    description: "Quick, classic NY-style pizza slices served fresh from their walk up window",
+    coords: [-97.74961062971471, 30.24898598527041]
+  },
+  {
+    title: "Hopdoddy Burger Bar",
+    category: "Food",
+    description: "South Congress flagship for elevated burgers with creative toppings and local ingredients. Pair with craft beer or a milkshake. Don't skip the fries.",
+    coords: [-97.74996110295062, 30.249667180457052]
+  },
+  {
+    title: "Perla's",
+    category: "Food",
+    description: "South Congress staple with fresh oysters, gulf seafood, and coastal classics. Dine under oak trees on the breezy patio, where relaxed elegance meets Austin’s vibrant street life. A perfect spot for leisurely lunches or sunset dinners.",
+    coords: [-97.75004045540851, 30.249969932344527]
+  },
+  {
+    title: "Gelato Paradiso",
+    category: "Food",
+    description: "Authentic Italian gelato made in small batches every morning. Wide variety of classic and seasonal flavors. Dessert lover's dream.",
+    coords: [-97.75016650897493, 30.24988474893175]
+  },
+  {
+    title: "Amy's Ice Cream",
+    category: "Food",
+    description: "Local legend for creative flavors and mix-ins. Scoop or sundae, Amy's never disappoints. Pro-tip: Mexican Vanilla is a fan favorite.",
+    coords: [-97.7489499298395, 30.250957596779557]
+  },
+  {
+    title: "Lucky Robot",
+    category: "Food",
+    description: "Playful fusion of traditional and modern sushi. Colorful decor and sustainable seafood program. A lively, casual vibe.",
+    coords: [-97.74898068025786, 30.250828101854353]
+  },
+  {
+    title: "Aba",
+    category: "Food",
+    description: "Fresh Mediterranean cuisine with bold flavors and vibrant ingredients. Stylish patio at Music Lane is the perfect Austin hangout.",
+    coords: [-97.74780101481046, 30.2530814560305]
+  },
+  {
+    title: "Sun Life Organics",
+    category: "Food",
+    description: "Health-conscious stop for cold-pressed juices, smoothies, and nourishing bowls. Quality ingredients in every sip and bite.",
+    coords: [-97.74817036203493, 30.252916420556232]
+  },
+  {
+    title: "Magick Matcha",
+    category: "Food",
+    description: "A serene South Congress retreat, woman-owned and community-rooted. Serving ceremonial-grade matcha with modern artistry, calming tones, and heartfelt hospitality. Stop by to chat, sip mindfully, and share in Austin’s warm, creative spirit.",
+    coords: [-97.75038138922807, 30.2484136248886]
+  },
+  {
+    title: "Jeni's Ice Cream",
+    category: "Food",
+    description: "Artisanal ice cream with unique seasonal flavors crafted from quality ingredients. Always a good idea on a warm Texas night.",
+    coords: [-97.74897994093197, 30.252103939011917]
+  },
+  {
+    title: "Little Brother",
+    category: "Food",
+    description: "Around the corner is Little Brother, a walk-up South Congress coffee window serving rich espresso drinks and fresh kolaches. Easy, friendly, and perfect for your SoCo stroll.",
+    coords: [-97.75035994566181, 30.24847247672058]
+  },
+  {
+    title: "Kendra Scott",
+    category: "Shopping",
+    description: "An Austin Texas-based jewelry brand, Kendra Scott offers timeless pieces with a modern twist. Known for its signature use of vibrant gemstones and intricate designs, Kendra Scott is the go-to destination for elegant and personalized accessories. The Flagship retail store is a lovely, refurbished home. They offer an in-house café, as well as the brand's signature color bar, where visitors can customize their purchases.",
+    coords: [-97.75035594535976, 30.246797025573073]
+  },
+  {
+    title: "Marine Layer",
+    category: "Shopping",
+    description: "Marine Layer is all about comfort and sustainability. Specializing in ultra-soft essentials crafted from eco-friendly materials, this California-based brand offers a range of relaxed and effortlessly cool apparel for men and women.",
+    coords: [-97.74937292213849, 30.249922129835767]
+  },
+  {
+    title: "Howler Brothers",
+    category: "Shopping",
+    description: "Inspired by the laid-back coastal lifestyle, Howler Brothers combines function and style in its range of outdoor apparel and accessories. Whether you're hitting the waves or exploring the city, Howler Brothers has got you covered with their durable and stylish gear.",
+    coords: [-97.74935564505061, 30.250003184497885]
+  },
+  {
+    title: "Aviator Nation",
+    category: "Shopping",
+    description: "Channeling the retro vibes of the 1970s, Aviator Nation offers a colorful collection of vintage-inspired activewear and casual wear. From cozy hoodies and sweatpants to graphic tees and accessories, Aviator Nation is all about embracing the California dream.",
+    coords: [-97.7492252576941, 30.250207777547033]
+  },
+  {
+    title: "Goorin Bros Hat",
+    category: "Shopping",
+    description: "Established in 1895, Goorin Bros is a family-owned hat brand known for its quality craftsmanship and timeless designs. Whether you're looking for a classic fedora, a trendy flat cap, or a statement-making wide-brim hat, Goorin Bros has the perfect headwear to elevate your style.",
+    coords: [-97.74921700532973, 30.250265519759026]
+  },
+  {
+    title: "Warby Parker",
+    category: "Shopping",
+    description: "Warby Parker revolutionized the eyewear industry with its stylish and affordable glasses and sunglasses. With a commitment to quality, design, and social responsibility, Warby Parker offers a wide range of frames to suit every face shape and personal style.",
+    coords: [-97.74915599327318, 30.250428851817773]
+  },
+  {
+    title: "Nike",
+    category: "Shopping",
+    description: "A global leader in athletic footwear and apparel, Nike offers a comprehensive range of performance-driven products for men, women, and kids. From running shoes and workout gear to streetwear-inspired styles, Nike Austin is the ultimate destination for all your athletic and casual wear needs.",
+    coords: [-97.74826338684858, 30.251796407330204]
+  },
+  {
+    title: "Hermès",
+    category: "Shopping",
+    description: "A global icon of luxury, Hermes is synonymous with craftsmanship and timeless elegance. From iconic silk scarves and leather goods to exquisite fragrances and ready-to-wear collections, Hermes Austin offers a curated selection of the brand's most coveted items.",
+    coords: [-97.74842348271692, 30.25195109685191]
+  },
+  {
+    title: "Tecovas",
+    category: "Shopping",
+    description: "Tecovas offers high-quality, handcrafted Western boots at accessible prices. With a focus on craftsmanship and comfort, Tecovas boots are designed to be both stylish and functional, making them a favorite among boot enthusiasts and newcomers alike.",
+    coords: [-97.7502311912464, 30.24885236420205]
+
+  }
+];
+places.push(
+  {
+    title: "Allen's Boots",
+    category: "Shopping",
+    description: "A true Texas institution, Allens Boots has been providing locals and visitors alike with an extensive selection of Western boots and apparel for over 40 years. Whether you're a cowboy or just looking to channel some Texas flair, Allens Boots has the perfect pair of boots for you.",
+    coords: [-97.7504888788919, 30.248176192744324]
+  },
+  {
+    title: "Noah Marion",
+    category: "Shopping",
+    description: "Quality For Life. Goods For Everyone. Noah Marion makes and offers an amazing line of leather goods, home goods, vintage clothing and goods as well as other sundries for everyone and anyone.",
+    coords: [-97.75065437460901, 30.247735651669828]
+  },
+  {
+    title: "Le Labo",
+    category: "Shopping",
+    description: "Le Labo is a luxury fragrance brand known for its artisanal perfumes, candles, and body care products. With a focus on craftsmanship and individuality, Le Labo offers a unique olfactory experience, allowing customers to personalize their scents and create bespoke fragrances that resonate with their personal style and sensibilities.",
+    coords: [-97.74834280976424, 30.252696115676514]
+  },
+  {
+    title: "Reformation",
+    category: "Shopping",
+    description: "Reformation is a sustainable fashion brand offering effortlessly chic apparel for women. Known for its eco-friendly materials and transparent supply chain, Reformation's collections feature a mix of feminine dresses, stylish separates, and trendy accessories that are both fashionable and environmentally conscious.",
+    coords: [-97.74848155976416, 30.252266842143683]
+  },
+  {
+    title: "Rag & Bone",
+    category: "Shopping",
+    description: "Rag & Bone is a contemporary fashion brand offering a mix of classic tailoring and edgy, urban-inspired designs for men and women. Known for its high-quality materials, impeccable craftsmanship, and downtown New York aesthetic, Rag & Bone's collections include a range of versatile apparel, footwear, and accessories that effortlessly blend style and comfort.",
+    coords: [-97.74807609460161, 30.25338628489891]
+  },
+  {
+    title: "Moscot",
+    category: "Shopping",
+    description: "Moscot is a New York City-based eyewear brand known for its timeless designs and unparalleled craftsmanship. With a heritage dating back to 1915, Moscot offers a range of classic and contemporary frames that combine style, comfort, and quality.",
+    coords: [-97.74896503542828, 30.252153408517103]
+  },
+  {
+    title: "Billy Reid",
+    category: "Shopping",
+    description: "Billy Reid is a luxury American fashion brand known for its Southern-inspired menswear and womenswear collections. With a focus on quality materials, craftsmanship, and attention to detail, Billy Reid offers timeless and sophisticated apparel, shoes, and accessories.",
+    coords: [-97.7489540524252, 30.252204233325244]
+  },
+  {
+    title: "Stag Provisions For Men",
+    category: "Shopping",
+    description: "STAG is a modern-day general store for every man & specializes in contemporary clothing with classic roots. Our sister brand, Daughters, shares the same ethos for women. STAG was founded on the belief that clothes don’t make the man, they just help him express his individual style. Their selections are meant to stand the test of time and to remain a part of a wardrobe for many years to come.",
+    coords: [-97.74962840938574, 30.248934687226992]
+  },
+  {
+    title: "Lululemon",
+    category: "Shopping",
+    description: "Lululemon is a global activewear brand known for its high-performance yoga pants, leggings, and workout apparel. With a focus on quality, innovation, and community, Lululemon offers a wide range of stylish and functional activewear and accessories for men and women.",
+    coords: [-97.74779447854286, 30.254057890354773]
+  },
+  {
+    title: "Yeti Flagship",
+    category: "Shopping",
+    description: "Homegrown in Austin, YETI is a leading brand in outdoor lifestyle products, known for its durable and high-performance coolers, drinkware, and outdoor gear. Whether you're camping, fishing, or just enjoying a day in the great outdoors, YETI's products are designed to withstand the toughest conditions while keeping your food and drinks cold (or hot) for hours.",
+    coords: [-97.74632300428553, 30.259472533998917]
+  }
+);
+places.push(
+  {
+    title: "Warby Parker",
+    category: "Shopping",
+    description: "Warby Parker revolutionized the eyewear industry with its stylish and affordable glasses and sunglasses. With a commitment to quality, design, and social responsibility, Warby Parker offers a wide range of frames to suit every face shape and personal style.",
+    coords: [-97.74915599327318, 30.250428851817773]
+  },
+  {
+    title: "Alo",
+    category: "Shopping",
+    description: "Alo is a yoga-inspired activewear brand known for its high-performance fabrics and fashion-forward designs. From leggings and sports bras to hoodies and accessories, Alo offers stylish and functional apparel that transitions seamlessly from the yoga studio to the street.",
+    coords: [-97.7486413451315, 30.251603936038208]
+  },
+  {
+    title: "Yellow Rose by Kendra Scott",
+    category: "Shopping",
+    description: "A South Congress boutique blending Texas heritage with modern design. Find bold, sculptural jewelry inspired by the Lone Star spirit—elegant, timeless, and uniquely Austin.",
+    coords: [-97.75094600887074, 30.24693641117129]
+  },
+  {
+    title: "Sabah",
+    category: "Shopping",
+    description: "Located behind imogene + willie, Sabah offers handcrafted leather shoes and accessories. Globally inspired, Texas-rooted—each pair made for relaxed, artful wandering.",
+    coords: [-97.74923733932405, 30.24955653628905]
+  },
+  {
+    title: "Heritage Boot Co",
+    category: "Shopping",
+    description: "A South Congress landmark for handcrafted boots made with rich leathers, intricate stitching, and vintage Western designs. Step inside to find classic cowboy styles and one-of-a-kind pairs, all crafted with old-world techniques that honor Texas heritage and timeless artistry.",
+    coords: [-97.75107320940887, 30.246595670089974]
+  },
+  {
+    title: "Daughters",
+    category: "Shopping",
+    description: "Effortlessly chic South Congress boutique offering curated womenswear, soft knits, and timeless staples. Light-filled, minimalist, and thoughtfully edited for elevated everyday style.",
+    coords: [-97.74899719993681, 30.252061923795836]
+  },
+  {
+    title: "Imogene + Willie",
+    category: "Shopping",
+    description: "A South Congress staple for premium denim and laid-back Americana. Shop expertly crafted jeans, vintage tees, and well-worn classics in a converted gas station that feels equal parts workshop and gathering spot. Authentic Austin style, built to last.",
+    coords: [-97.74932185384306, 30.24961591527527]
+  }
+);
+places.push(
+  {
+    title: "Maufrais",
+    category: "Shopping",
+    description: "A South Congress shop blending custom hat fitting with curated Western-inspired goods. Watch hats shaped to perfection, browse vintage finds, and soak in laid-back Austin style with a timeless frontier spirit.",
+    coords: [-97.75036913028596, 30.24844009958545]
+  },
+  {
+    title: "Le Labo",
+    category: "Shopping",
+    description: "Le Labo is a luxury fragrance brand known for its artisanal perfumes, candles, and body care products. With a focus on craftsmanship and individuality, Le Labo offers a unique olfactory experience, allowing customers to personalize their scents and create bespoke fragrances that resonate with their personal style and sensibilities.",
+    coords: [-97.74834280976424, 30.252696115676514]
+  },
+  {
+    title: "Sézane Pop-Up",
+    category: "Shopping",
+    description: "Parisian charm on South Congress. Discover effortless, vintage-inspired French fashion with feminine details, quality fabrics, and timeless appeal in a beautifully curated space.",
+    coords: [-97.7484079373152, 30.252504104670194]
+  },
+  {
+    title: "Everlane",
+    category: "Shopping",
+    description: "Clean, modern essentials on South Congress. Ethically made denim, crisp tees, and refined staples in a minimalist space reflecting timeless, sustainable style.",
+    coords: [-97.74836404700926, 30.25262762771753]
+  },
+  {
+    title: "Vuori",
+    category: "Shopping",
+    description: "Performance meets comfort on South Congress. Shop versatile activewear with a laid-back California vibe—perfect for workouts, travel, or relaxed Austin days.",
+    coords: [-97.74767416642572, 30.25433742963274]
+  },
+  {
+    title: "Ganni",
+    category: "Shopping",
+    description: "Copenhagen cool on South Congress. Playful prints, bold silhouettes, and effortless Scandinavian style make this boutique a go-to for standout, modern dressing.",
+    coords: [-97.74893522441994, 30.252256413434267]
+  }
+);
+places.push(
+  {
+    title: "St. Edward's University",
+    category: "University",
+    description: "",
+    coords: [-97.75422851007785, 30.22985107220299]
+  },
+  {
+    title: "University of Texas",
+    category: "University",
+    description: "",
+    coords: [-97.73452388530188, 30.28458031076815]
+  },
+  {
+    title: "Texas State Capitol",
+    category: "Sights",
+    description: "A short ride away, the Texas State Capitol stands as the largest in the country, even taller than the U.S. Capitol in D.C. Free tours guide you through Texas' rich history, or you can simply stroll the well-manicured grounds. It’s a striking symbol of Lone Star pride, with stunning architecture that photographs beautifully from every angle.",
+    coords: [-97.7403606480172, 30.274722517567795]
+  },
+  {
+    title: "Barton Springs Pool",
+    category: "Sights",
+    description: "Zilker Park is Austin’s 351-acre heart of outdoor fun, and Barton Springs Pool is its crown jewel. The natural spring-fed pool stays cool year-round, so whether you’re a summer swimmer or just want to dip your toes in, it’s an absolute must. Be sure to explore the surrounding park—ideal for picnics, frisbee, or simply unwinding on the grass.",
+    coords: [-97.77063964963742, 30.26378144897859]
+  },
+  {
+    title: "Deep Eddy",
+    category: "Sights",
+    description: "Austin’s oldest swimming pool, spring-fed and refreshingly cool even in peak summer. Concrete steps lead into clear blue water framed by towering oaks and grassy banks. A local favorite for leisurely swims, sunbathing, and soaking in nearly a century of laid-back tradition.",
+    coords: [-97.77317714112299, 30.2773246071379]
+  },
+  {
+    title: "Zilker Botanical Garden",
+    category: "Sights",
+    description: "A peaceful haven in the heart of Austin. Wander themed trails past koi ponds, waterfalls, and sculpted blooms. Explore the Japanese garden’s quiet grace, rose beds in full flourish, and native Texas landscapes alive with color and texture. A living gallery of Austin’s natural beauty.",
+    coords: [-97.77258716714248, 30.269490197489517]
+  },
+  {
+    title: "Zilker Metropolitan Park",
+    category: "Sights",
+    description: "Zilker Park is perfect for picnics, frisbee, and riverside walks. In fall, it transforms into the lively Austin City Limits Festival, drawing music lovers from around the world. Cool off year-round in nearby Barton Springs Pool or just soak in the laid-back vibe that defines the city.",
+    coords: [-97.77273581721674, 30.267844524135512]
+  },
+  {
+    title: "Lady Bird Lake & Ann and Roy Butler Hike-and-Bike Trail",
+    category: "Sights",
+    description: "Take in Austin’s skyline while gliding across the water on a kayak or paddleboard. Or, keep your feet on the ground with a peaceful walk or bike ride along the lakeside trail. A favorite escape for locals and visitors alike, this green oasis offers a perfect blend of city and nature.",
+    coords: [-97.74873578532832, 30.2620055354668]
+  },
+  {
+    title: "Paramount Theatre",
+    category: "Sights",
+    description: "A century-old Austin icon with gilded ceilings, vintage charm, and a grand marquee glowing on Congress Ave. Hosts films, music, and live performances in an intimate, storied space. Step inside for a timeless blend of culture, history, and Austin’s artistic soul.",
+    coords: [-97.74187046157819, 30.269327427125916]
+  }
+);
+places.push(
+  {
+    title: "Congress Avenue Bridge Bats",
+    category: "Sights",
+    description: "This is an Austin classic you can’t miss. From March through November, more than a million Mexican free-tailed bats take flight from under the Congress Avenue Bridge at sunset. It’s a nightly spectacle that fills the sky and makes you feel like a true part of the city’s unique rhythm.",
+    coords: [-97.74507655205383, 30.261702948327255]
+  },
+  {
+    title: "Mount Bonell",
+    category: "Sights",
+    description: "For one of the best views in town, make the short trek up Mount Bonnell. You’ll be rewarded with sweeping views of Lake Austin and the city skyline—perfect for a sunrise or sunset visit. A peaceful escape from the buzz of the city, it’s one of our favorite places to breathe it all in.",
+    coords: [-97.7733381074202, 30.32076117695688]
+  },
+  {
+    title: "Blanton Museum of Art",
+    category: "Sights",
+    description: "Located on the University of Texas campus, the Blanton is where art meets awe. The museum’s vast collection spans classical to contemporary, but it’s Ellsworth Kelly’s breathtaking “Austin” installation that truly sets it apart. We love to lose ourselves here, and we’re sure you will, too.",
+    coords: [-97.73745138727577, 30.280988544406142]
+  },
+  {
+    title: "Waterloo Park",
+    category: "Sights",
+    description: "A lush urban retreat linking downtown with Waller Creek. Meandering trails, native gardens, and the Moody Amphitheater’s sweeping lawn invite picnics, concerts, and quiet reflection. Where Austin’s green vision meets community spirit in the heart of the city.",
+    coords: [-97.73585120829881, 30.27397418163052]
+  },
+  {
+    title: "The Contemporary Austin – Laguna Gloria",
+    category: "Sights",
+    description: "Perched on the shores of Lake Austin, Laguna Gloria is both a museum and a sculpture garden that feels like a secret retreat. Wander through contemporary installations nestled among lush gardens and take in the Mediterranean-style villa that sits on the property. It’s a place where art and nature blend seamlessly.",
+    coords: [-97.77454828569839, 30.31146938390937]
+  },
+  {
+    title: "Westcave Outdoor Discovery Center",
+    category: "Sights",
+    description: "If you’re craving a quick escape into nature, Westcave Preserve offers a stunning waterfall and grotto just 30 minutes from the city. Guided tours take you through this hidden gem, where the lush landscape and natural beauty offer a refreshing break from city life.",
+    coords: [-98.14073162346799, 30.337208496714837]
+  },
+  {
+    title: "LBJ Presidential Library",
+    category: "Sights",
+    description: "Step into the legacy of one of Texas’ most influential figures at the LBJ Library. Dive into the history of the 1960s through exhibits on civil rights, the Vietnam War, and LBJ’s Great Society programs. Thought-provoking and beautifully curated, it’s an experience that sticks with you long after you’ve left.",
+    coords: [-97.72929867306351, 30.28589390652212]
+  },
+  {
+    title: "Austin Central Library",
+    category: "Sights",
+    description: "A modern architectural gem on Shoal Creek with airy reading rooms, rooftop gardens, and sweeping city views. Browse vast collections, cozy up in quiet corners, or linger at the café. A space where Austin’s creative, civic, and sustainable spirit shines.",
+    coords: [-97.75175186937109, 30.26597635401707]
+  },
+  {
+    title: "Quickie Pickie",
+    category: "Markets",
+    description: "Quickie Pickie is a great combination of a neighborhood grocery store and a casual café. They offer craft beers, wines, snacks, and fresh produce, plus a delicious menu of made-to-order food. Grab a coffee or sandwich and pick up some essentials while you’re at it. It's a little further east but perfect for a quick stop in the area.",
+    coords: [-97.72724907169481, 30.26871442717946]
+  },
+  {
+    title: "Fresh Plus Grocery",
+    category: "Markets",
+    description: "Fresh Plus is a beloved local grocery store that offers a solid selection of fresh produce, local goods, and household staples. It’s the perfect stop if you’re looking to support a small business while stocking up on groceries or grabbing a quick sandwich from their deli.",
+    coords: [-97.75842917101718, 30.280659237654746]
+  }
+);
+places.push(
+  {
+    title: "River City Market",
+    category: "Markets",
+    description: "Local provisions, fresh produce, and crafted goods in a warm, welcoming space. Perfect for gathering picnic fare before exploring Austin’s parks and trails. A true taste of the city’s community spirit and culinary charm.",
+    coords: [-97.75249979246205, 30.240489533866892]
+  },
+  {
+    title: "Whole Foods Market",
+    category: "Markets",
+    description: "For those seeking organic and health-conscious options, Whole Foods Market on Lamar is Austin’s flagship location, offering a vast array of fresh produce, prepared foods, specialty items, and natural products. While it’s a bit farther from SoCo, it’s well worth the visit if you’re looking for high-quality groceries and a fantastic prepared food selection.",
+    coords: [-97.75329099420833, 30.27059312367612]
+  },
+  {
+    title: "Royal Blue Grocery",
+    category: "Markets",
+    description: "For a boutique grocery experience, Royal Blue Grocery offers a mix of fresh produce, gourmet products, and grab-and-go items. They’re perfect for picking up high-quality snacks, coffee, and quick meals. You’ll also find a well-curated selection of wine and craft beer to take back to your room.",
+    coords: [-97.7423012720699, 30.26832413953052]
+  },
+  {
+title: "Tiny Grocer",
+    category: "Markets",
+    description: "Tiny Grocer is your go-to spot for gourmet groceries and artisanal finds just a short walk from the hotel. Stocked with organic produce, fresh sandwiches, craft beers, and locally sourced products, Tiny Grocer offers a delightful mix of essentials and indulgences. Their selection of unique snacks and wine makes it a great stop for a quick treat or a special in-room spread.",
+    coords: [-97.75111675508892, 30.24637220865938]
+  },
+  {
+title: "H-E-B",
+    category: "Markets",
+    description: "If you’re looking for a full-service grocery store, H-E-B has everything you need, from fresh produce and meat to household essentials. It’s a Texas favorite, known for its wide selection and competitive prices. Whether you’re planning a picnic, restocking your room, or simply grabbing a quick snack, H-E-B has it all.",
+    coords: [-97.7546576279853, 30.238736013871915]
+  },
+  {
+    title: "Dripping Springs",
+    category: "Roadtrips",
+    description: "Known as the “Gateway to the Hill Country,” Dripping Springs offers a charming mix of wineries, distilleries, and outdoor adventures. Take a hike at Hamilton Pool Preserve, a breathtaking natural swimming hole surrounded by limestone cliffs, or visit Pedernales Falls State Park for more scenic hikes and river views. Don’t miss a stop at Deep Eddy Distillery or Treaty Oak Distilling for a taste of local craft spirits.",
+    coords: [-98.08752231108886, 30.191549950020487]
+  },
+  {
+    title: "Lockhart",
+    category: "Roadtrips",
+    description: "If you’re a fan of Texas barbecue, a trip to Lockhart is non-negotiable. Known as the Barbecue Capital of Texas, this small town is home to some of the most legendary BBQ joints in the state, including Kreuz Market, Smitty’s Market, and Black’s Barbecue. Enjoy the mouthwatering smoked meats, then take a stroll around the historic courthouse square.",
+    coords: [-97.67098387952477, 29.88510466366536]
+  },
+  {
+    title: "San Marcos",
+    category: "Roadtrips",
+    description: "San Marcos is home to the beautiful San Marcos River, where you can rent tubes, kayaks, or paddleboards for a leisurely float. If you’re in the mood for shopping, the San Marcos Premium Outlets are one of the largest outlet malls in the country, offering great deals on designer brands. For history buffs, check out The Meadows Center for Water and the Environment, where you can take a glass-bottom boat tour of Spring Lake.",
+    coords: [-97.94112404060449, 29.882487826782295]
+  },
+  {
+    title: "Wimberly",
+    category: "Roadtrips",
+    description: "This picturesque small town is an ideal escape for those looking to relax by the water. Spend the day floating in Blue Hole Regional Park or Jacob’s Well, a unique spring-fed swimming spot that’s popular with locals. Stroll through the town square to find unique boutiques and art galleries, and grab a bite at The Leaning Pear for fresh, seasonal Hill Country fare.",
+    coords: [-98.0989388278129, 29.997618546867656]
+  },
+  {
+    title: "Canyon Lake",
+    category: "Roadtrips",
+    description: "If you’re looking for a day by the water, Canyon Lake is the perfect spot for boating, swimming, and relaxing. Known as the “Water Recreation Capital of Texas,” Canyon Lake boasts clear, cool waters and 80 miles of shoreline. Rent a boat for the day or take a scenic drive along the Canyon Lake Gorge, where you can enjoy breathtaking views of the lake and surrounding hills.",
+    coords: [-98.24724513748323, 29.88642648489777]
+  },
+  {
+    title: "New Braunfels",
+    category: "Roadtrips",
+    description: "Home to Schlitterbahn, one of the best water parks in the world, New Braunfels is a fantastic destination for families and water lovers. You can also float down the Comal River, which is spring-fed and perfect for tubing. If you’re interested in local history, stop by Gruene Historic District or visit the New Braunfels Railroad Museum.",
+    coords: [-98.12427726791086, 29.703485140166023]
+  },
+  {
+    title: "Johnson City",
+    category: "Roadtrips",
+    description: "Famous as the hometown of President Lyndon B. Johnson, Johnson City offers both historical and natural attractions. Tour the LBJ Ranch at the Lyndon B. Johnson National Historical Park, and then head over to the Science Mill, an interactive science museum perfect for families. Round out your visit with a tasting at Texas Hills Vineyard or a stop at Pecan Street Brewing for a refreshing craft beer.",
+    coords: [-98.4091899675148, 30.276812975756755]
+  }
+);
+places.push(
+  {
+    title: "Fredericksburg",
+    category: "Roadtrips",
+    description: "Fredericksburg is a can’t-miss destination for wine lovers and history buffs alike. Located in the heart of Texas Wine Country, this charming German-settled town is surrounded by vineyards and tasting rooms, including the renowned Grape Creek Vineyards and Becker Vineyards. After a day of wine tasting, explore the shops on Main Street, visit the National Museum of the Pacific War, or hike up Enchanted Rock, a massive pink granite dome that offers panoramic views of the Hill Country.",
+    coords: [-98.87217633572094, 30.274712796863398]
+  },
+  {
+    title: "Marble Falls",
+    category: "Roadtrips",
+    description: "For a relaxing day trip with a focus on food and nature, Marble Falls is the place to be. Start with breakfast at the legendary Blue Bonnet Café, known for its pies, then head out to explore Balcones Canyonlands National Wildlife Refuge or Lake Marble Falls for boating and fishing. If you’re visiting in the fall, don’t miss the scenic drive to Sweet Berry Farm for pumpkin patches and seasonal produce.",
+    coords: [-98.27311118581106, 30.577957526623166]
+  },
+  {
+    title: "Salado",
+    category: "Roadtrips",
+    description: "This small but artsy village is the perfect destination for a leisurely day trip. Explore the charming shops and galleries that line Main Street, or visit the Salado Sculpture Garden for an outdoor art experience. Wine lovers can stop by Salado Winery Company for a tasting of local Texas wines. Don’t forget to visit Barrow Brewing Co. for some locally brewed craft beer.",
+    coords: [-97.53899707378983, 30.947464307567273]
+  },
+  {
+    title: "Brenham",
+    category: "Roadtrips",
+    description: "Brenham is a charming small town best known as the home of Blue Bell Ice Cream. Take a tour of the Blue Bell Creamery, then stroll around downtown Brenham’s antique shops and art galleries. If you’re visiting in the spring, Brenham is also a great place to see Texas’ famous bluebonnets in full bloom.",
+    coords: [-96.3991312019827, 30.167696210101894]
+  },
+  {
+    title: "Gruene",
+    category: "Roadtrips",
+    description: "Step back in time with a visit to Gruene, a small town with big charm located on the banks of the Guadalupe River. Known for its well-preserved 19th-century architecture, Gruene is home to Gruene Hall, the oldest dance hall in Texas, where you can catch live music and dance the night away. For outdoor enthusiasts, tubing down the Guadalupe River is a quintessential Central Texas experience.",
+    coords: [-98.1044254709068, 29.73858081399311]
+  },
+  {
+    title: "Equinox",
+    category: "Gym",
+    description: "Equinox is right down the street—a modern haven with state-of-the-art equipment, yoga and cycling studios, personal training, and a tranquil spa for post-workout recovery. Elevate your South Congress routine in refined style.",
+    coords: [-97.74757343306298, 30.25394620040103]
+  },
+  {
+    title: "South Congress Avenue (SoCo) Shopping District",
+    category: "Sights",
+    description: "Right outside our door, SoCo is a colorful blend of independent boutiques, vintage finds, and Austin-original shops. Pick up some boots at Allens Boots, or grab a quirky souvenir at Uncommon Objects. This strip has it all—whether you’re after high-end fashion, unique gifts, or a little slice of Austin weirdness.",
+    coords: [-97.74995839111897, 30.248927807751556]
+  },
+  {
+    title: "Limbo Jewelry SoCo",
+    category: "Shopping",
+    description: "Discover the essence of modern elegance at Limbo Jewelry. This boutique is a haven for those who seek refined adornments crafted with passion and precision. From chic gold and silver pieces, meticulously fabricated in-house, to bespoke designs tailored to your individual style, Limbo Jewelry offers a curated collection that exudes sophistication.",
+    coords: [-97.75095746945263, 30.24678799978598]
+  },
+  {
+    title: "Big Top Candy Shop",
+    category: "Shopping",
+    description: "Big Top Candy Shop is a whimsical confectionary wonderland that captures the nostalgic charm of old-fashioned candy stores. This delightful shop beckons visitors with its colorful exterior and enticing aroma of sweets. Inside, shelves are adorned with jars brimming with classic candies, artisan chocolates, and unique treats from around the world, offering a delightful sensory experience for all ages.",
+    coords: [-97.75095027956044, 30.246825068000632]
+  },
+  {
+    title: "Paper Work",
+    category: "Shopping",
+    description: "Paper Work offers art, jewelry, clothing, and gifts designed and produced by independent artists from Texas and across the country. Spend extra time enjoying the art-filled gallery space in the back of the store and find unique pieces for anyone who deserves a memorable and affordable gift.",
+    coords: [-97.75093572738942, 30.246877294642502]
+  },
+  {
+    title: "AUS - Austin-Bergstorm International Airport",
+    category: "Airport",
+    coords: [-97.66560115512712, 30.19397453814193]
+  },
+  {
+    title: "Circuit of The Americas",
+    category: "Sights",
+    description: "World-class track hosting F1, MotoGP, and concerts just outside Austin. Sweeping grandstands, high-speed thrills, and Hill Country views make it a must for racing fans and music lovers alike. An iconic blend of sport, spectacle, and Texas energy.",
+
+    coords: [-97.63581700982876, 30.13785550081556]
+  }
+);
+
+const allMarkers = [];
+
+// De‑dupe places by title (case/trim-insensitive). Keeps the first occurrence.
+const seen = new Set();
+const uniquePlaces = [];
+for (const p of places) {
+  const key = p.title?.trim().toLowerCase();
+  if (!key || seen.has(key)) continue;
+  seen.add(key);
+  uniquePlaces.push(p);
+}
+places.length = 0;
+places.push(...uniquePlaces);
+
+places.forEach((place) => {
+  const popup = new mapboxgl.Popup({ offset: 25, closeOnClick: false }).setHTML(`
+    <div class="custom-popup">
+      <h3>${place.title}</h3>
+      <p>${place.description || ''}</p>
+      <p><a target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${place.coords[1]},${place.coords[0]}">See Route</a></p>
+    </div>
+  `);
+
+  // ================================
+  // ✅ Create a container div for marker
+  // ================================
+  const el = document.createElement('div');
+  el.className = 'custom-marker';
+
+  // Add the icon image inside
+  el.innerHTML = `<img src="${categoryIcons[place.category] || 'https://placehold.co/30x30'}" 
+                      alt="${place.category} Icon" 
+                      style="width: 30px; height: 30px;">`;
+
+  // ================================
+  // ✅ Create the Mapbox marker
+  // ================================
+  const marker = new mapboxgl.Marker(el)
+    .setLngLat(place.coords)
+    .setPopup(popup)
+    .addTo(map);
+    allMarkers.push({ marker, category: place.category });
+  let lockedOpen = false;
+
+  // ================================
+  // ✅ Hover in
+  // ================================
+  el.addEventListener('mouseenter', () => {
+    if (!lockedOpen) el.classList.add('hover');
+    if (!lockedOpen) popup.addTo(map);
+  });
+
+  // ================================
+  // ✅ Hover out
+  // ================================
+  el.addEventListener('mouseleave', () => {
+    if (!lockedOpen) el.classList.remove('hover');
+    if (!lockedOpen) popup.remove();
+  });
+
+  // ================================
+  // ✅ Click to lock/unlock
+  // ================================
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    lockedOpen = !lockedOpen;
+    if (lockedOpen) {
+      popup.addTo(map);
+      el.classList.add('locked');
+    } else {
+      popup.remove();
+      el.classList.remove('locked');
+    }
+  });
+
+  // ================================
+  // ✅ Optional: close lock if clicking map background
+  // ================================
+  map.on('click', () => {
+    if (lockedOpen) {
+      lockedOpen = false;
+      popup.remove();
+      el.classList.remove('locked');
+    }
+  });
+
+});  // ✅ This closes places.forEach
+
+// ================================
+// ✅ Define the filter function OUTSIDE the loop
+// ================================
+function filterMarkers(category) {
+  const bounds = new mapboxgl.LngLatBounds();
+  let hasVisible = false;
+
+  allMarkers.forEach(item => {
+    if (category === 'All' || item.category === category) {
+      item.marker.getElement().style.display = '';
+      bounds.extend(item.marker.getLngLat());
+      hasVisible = true;
+    } else {
+      item.marker.getElement().style.display = 'none';
+    }
+  });
+
+  if (hasVisible) {
+    map.fitBounds(bounds, {
+      padding: 50,     // space around the markers
+      maxZoom: 16,     // optional: limit maximum zoom
+      duration: 1000   // smooth animation
+    });
+  }
+}
+
+// ================================
+// ✅ Add event listeners to legend buttons
+// ================================
+document.querySelectorAll('[data-category]').forEach(button => {
+  button.addEventListener('click', () => {
+    const selectedCategory = button.getAttribute('data-category');
+    filterMarkers(selectedCategory);
+  });
+});
+
+</script>
+</body>
+</html>
