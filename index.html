@@ -118,6 +118,13 @@ window.addEventListener('DOMContentLoaded', () => {
     // If no "All" button, fit to everything once
     fitToCategory('All');
   }
+  // Listen for filter requests coming from the parent (Webflow)
+window.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type === 'FILTER_CATEGORY') {
+    filterMarkers(data.category);
+  }
+});
 });
 </script>
   </style>
