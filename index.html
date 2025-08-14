@@ -59,124 +59,98 @@
 }
 
 <script>
-// ==============
-// Webflow hookup
-// ==============
+/* =========================
+   Webflow + Legend Hookups
+   Requirements:
+   - window.map (Mapbox map instance)
+   - window.allMarkers = [{ marker, category }, ...]
+   - function filterMarkers(category)
+   ========================= */
 
-// 1) Listen to ANY element that has data-category
+// ---------- (1) Optional: mark “active” button style if you keep a legend inside the iframe
 const filterButtons = document.querySelectorAll('[data-category]');
-
-// (Optional) helper to toggle an active class for styling
 function setActiveButton(activeBtn) {
-  filterButtons.forEach(btn => {
-    btn.classList.toggle('is-active', btn === activeBtn);
-  });
+  filterButtons.forEach(btn => btn.classList.toggle('is-active', btn === activeBtn));
 }
 
-// 2) Zoom/fit to the currently filtered markers
+// ---------- (2) Fit/zoom to the currently visible category
 function fitToCategory(category) {
-  const bounds = new mapboxgl.LngLatBounds();
-  let count = 0;
+  if (!window.allMarkers || !allMarkers.length) return;
 
-  allMarkers.forEach(({ marker, category: cat }) => {
-    const isMatch = category === 'All' || cat === category;
-    if (isMatch) {
-      bounds.extend(marker.getLngLat());
-      count++;
-    }
-  });
+  const matches = allMarkers.filter(m => category === 'All' || m.category === category);
+  if (!matches.length) return;
 
-  // No matches: do nothing
-  if (count === 0) return;
-
-  // One point: center and use a nice zoom
-  if (count === 1) {
-    map.easeTo({ center: bounds.getCenter(), zoom: 16 });
+  if (matches.length === 1) {
+    // Single point: center nicely
+    const center = matches[0].marker.getLngLat();
+    map.easeTo({ center, zoom: Math.min(16, map.getZoom() || 16), duration: 400 });
     return;
   }
 
-  // Multiple points: fit them with padding
-  map.fitBounds(bounds, { padding: { top: 120, right: 40, bottom: 40, left: 40 }, maxZoom: 17 });
+  // Multiple points: fit bounds
+  const bounds = new mapboxgl.LngLatBounds();
+  matches.forEach(m => bounds.extend(m.marker.getLngLat()));
+  map.fitBounds(bounds, { padding: { top: 120, right: 40, bottom: 40, left: 40 }, maxZoom: 17, duration: 500 });
 }
 
-// 3) Hook clicks to filter + fit
-filterButtons.forEach(button => {
-  button.addEventListener('click', () => {
-    const selectedCategory = button.getAttribute('data-category');
-    filterMarkers(selectedCategory);   // you already have this from the legend version
-    fitToCategory(selectedCategory);
-    setActiveButton(button);
-  });
-});
-
-// 4) (Optional) On load, default to "All" and fit to everything
-window.addEventListener('DOMContentLoaded', () => {
-  const allBtn = document.querySelector('[data-category="All"]');
-  if (allBtn) {
-    allBtn.click(); // triggers filter + fit + active state
-  } else {
-    // If no "All" button, fit to everything once
-    fitToCategory('All');
-  }
-  // Listen for filter requests coming from the parent (Webflow)
-window.addEventListener('message', (event) => {
-  const data = event.data || {};
-  if (data.type === 'FILTER_CATEGORY') {
-    filterMarkers(data.category);
-  }
-// Save initial view for reset
+// ---------- (3) Save initial view so we can reset later
 const INITIAL = {
   center: map.getCenter(),
   zoom: map.getZoom(),
   bearing: map.getBearing(),
   pitch: map.getPitch()
 };
-
-// If you already have a fitToCategory(category) and filterMarkers(category),
-// we’ll reuse them. If not, here’s a minimal fitToCategory:
-function fitToCategory(category) {
-  const visible = allMarkers.filter(m => category === 'All' || m.category === category);
-  if (!visible.length) return;
-  const bounds = new mapboxgl.LngLatBounds();
-  visible.forEach(m => bounds.extend(m.marker.getLngLat()));
-  map.fitBounds(bounds, { padding: 80, maxZoom: 17, duration: 600 });
-}
-
 function resetView() {
   map.easeTo({
     center: INITIAL.center,
     zoom: INITIAL.zoom,
     bearing: INITIAL.bearing,
     pitch: INITIAL.pitch,
-    duration: 600
+    duration: 500
   });
 }
 
-// OPTIONAL: lock down allowed origins later; use '*' while testing.
-const ALLOWED = '*'; // e.g., ['https://framehotel.webflow.io']
+// ---------- (4) Wire up any in‑iframe legend buttons (if present)
+filterButtons.forEach(button => {
+  button.addEventListener('click', () => {
+    const selectedCategory = button.getAttribute('data-category');
+    if (!selectedCategory) return;
+    filterMarkers(selectedCategory);
+    fitToCategory(selectedCategory);
+    setActiveButton(button);
+  });
+});
+
+// ---------- (5) Default selection on load (if you keep in‑iframe buttons)
+window.addEventListener('DOMContentLoaded', () => {
+  const allBtn = document.querySelector('[data-category="All"]');
+  if (allBtn) {
+    allBtn.click(); // triggers filter + fit + active state
+  } else {
+    // No local buttons? Just fit to everything once.
+    fitToCategory('All');
+  }
+});
+
+// ---------- (6) Listen for messages from the parent (Webflow page)
+const ALLOWED_ORIGINS = '*'; // Replace with e.g. ['https://framehotel.webflow.io'] when you want to lock down
 
 window.addEventListener('message', (event) => {
-  // If you want to restrict:
-  // if (Array.isArray(ALLOWED) && !ALLOWED.includes(event.origin)) return;
+  // Security tighten (optional):
+  // if (Array.isArray(ALLOWED_ORIGINS) && !ALLOWED_ORIGINS.includes(event.origin)) return;
 
   const msg = event.data;
   if (!msg || msg.type !== 'FRAME_MAP') return;
 
   if (msg.action === 'filter' && msg.payload?.category) {
     const category = msg.payload.category;
-    filterMarkers(category);     // your existing function
-    fitToCategory(category);     // zoom to those markers
+    filterMarkers(category);
+    fitToCategory(category);
   }
 
   if (msg.action === 'reset') {
-    // show all, then reset view
     filterMarkers('All');
     resetView();
-  }
-
-  // Optional: for debugging:
-  if (msg.action === 'hello') {
-    // console.log('Received hello from parent:', msg.payload);
   }
 });
 </script>
