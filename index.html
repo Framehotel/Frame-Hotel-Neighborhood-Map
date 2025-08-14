@@ -1062,7 +1062,7 @@ function filterMarkers(category) {
 document.querySelectorAll('[data-category]').forEach(button => {
   button.addEventListener('click', () => {
     const selectedCategory = button.getAttribute('data-category');
-    filterMarkers(selectedCategory);
+    filterMarkers(category);
   });
 });
 
