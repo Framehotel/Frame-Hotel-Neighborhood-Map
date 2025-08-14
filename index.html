@@ -124,7 +124,60 @@ window.addEventListener('message', (event) => {
   if (data.type === 'FILTER_CATEGORY') {
     filterMarkers(data.category);
   }
-});
+// Save initial view for reset
+const INITIAL = {
+  center: map.getCenter(),
+  zoom: map.getZoom(),
+  bearing: map.getBearing(),
+  pitch: map.getPitch()
+};
+
+// If you already have a fitToCategory(category) and filterMarkers(category),
+// we’ll reuse them. If not, here’s a minimal fitToCategory:
+function fitToCategory(category) {
+  const visible = allMarkers.filter(m => category === 'All' || m.category === category);
+  if (!visible.length) return;
+  const bounds = new mapboxgl.LngLatBounds();
+  visible.forEach(m => bounds.extend(m.marker.getLngLat()));
+  map.fitBounds(bounds, { padding: 80, maxZoom: 17, duration: 600 });
+}
+
+function resetView() {
+  map.easeTo({
+    center: INITIAL.center,
+    zoom: INITIAL.zoom,
+    bearing: INITIAL.bearing,
+    pitch: INITIAL.pitch,
+    duration: 600
+  });
+}
+
+// OPTIONAL: lock down allowed origins later; use '*' while testing.
+const ALLOWED = '*'; // e.g., ['https://framehotel.webflow.io']
+
+window.addEventListener('message', (event) => {
+  // If you want to restrict:
+  // if (Array.isArray(ALLOWED) && !ALLOWED.includes(event.origin)) return;
+
+  const msg = event.data;
+  if (!msg || msg.type !== 'FRAME_MAP') return;
+
+  if (msg.action === 'filter' && msg.payload?.category) {
+    const category = msg.payload.category;
+    filterMarkers(category);     // your existing function
+    fitToCategory(category);     // zoom to those markers
+  }
+
+  if (msg.action === 'reset') {
+    // show all, then reset view
+    filterMarkers('All');
+    resetView();
+  }
+
+  // Optional: for debugging:
+  if (msg.action === 'hello') {
+    // console.log('Received hello from parent:', msg.payload);
+  }
 });
 </script>
   </style>
