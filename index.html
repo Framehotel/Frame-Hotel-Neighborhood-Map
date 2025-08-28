@@ -134,25 +134,27 @@
     pitch: map.getPitch()
   };
 
-  // Reset helper
-  function resetMapView() {
-    map.easeTo({
-      center: INITIAL_VIEW.center,
-      zoom: INITIAL_VIEW.zoom,
-      bearing: INITIAL_VIEW.bearing,
-      pitch: INITIAL_VIEW.pitch,
-      duration: 600
-    });
-  }
+// Reset helper
+function resetMapView() {
+  // 1. Show all markers again
+  filterMarkers('All');
 
-  // Disable scroll zoom by default
+  // 2. Smoothly animate back to initial map view
+  map.easeTo({
+    center: INITIAL_VIEW.center,
+    zoom: INITIAL_VIEW.zoom,
+    bearing: INITIAL_VIEW.bearing,
+    pitch: INITIAL_VIEW.pitch,
+    duration: 10000   // smooth easing
+  });
+}
+   // Disable scroll zoom by default
   map.scrollZoom.disable();
 
   // Desktop: show hint if Ctrl not pressed
   map.on('wheel', (e) => {
     if (!e.originalEvent.ctrlKey) {
       e.preventDefault();
-      showTooltip('Hold Ctrl and scroll to zoom the map');
     }
   });
 
@@ -1130,5 +1132,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 </script>
+</body>
+</html>
+
 </body>
 </html>
