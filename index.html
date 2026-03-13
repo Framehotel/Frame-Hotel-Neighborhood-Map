@@ -117,23 +117,41 @@
    <script>
   mapboxgl.accessToken = 'pk.eyJ1IjoiZnJhbWVob3RlbCIsImEiOiJjbWN0ZGpjamEwNGFpMmtvaTg5MjVyeW82In0.4lypnDwBwqwQwbjbc0sGig';
 
-  const map = new mapboxgl.Map({
-    container: 'map',
-    style: 'mapbox://styles/framehotel/cmctkov2v00te01p6ac6q1a9v',
-    center: [-97.7494, 30.2499],
-    zoom: 16.82,
-    minZoom: 4,
-    maxZoom: 20
+ const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/framehotel/cmctkov2v00te01p6ac6q1a9v',
+  minZoom: 4,
+  maxZoom: 20
+});
+
+let INITIAL_VIEW;
+
+// Fit to both hotels once the map loads
+map.on('load', () => {
+  const bounds = new mapboxgl.LngLatBounds();
+
+  bounds.extend([-97.750715, 30.24936]); // SoCo
+  bounds.extend([-97.74838, 30.25006]);  // Treehouse
+
+  map.fitBounds(bounds, {
+    padding: {
+      top: 80,
+      bottom: 80,
+      left: 140,
+      right: 40
+    },
+    maxZoom: 17,
+    duration: 0
   });
 
-  // Save the initial view
-  const INITIAL_VIEW = {
+  // Save the fitted view for reset
+  INITIAL_VIEW = {
     center: map.getCenter(),
     zoom: map.getZoom(),
     bearing: map.getBearing(),
     pitch: map.getPitch()
   };
-
+});
 // Reset helper
 function resetMapView() {
   // 1. Show all markers again
